@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewsLens — Multilingual Headline Classifier</title>
+    <style>
+        :root {
+            --color-background-outer: #0a0a0a;
+            --color-background-tertiary: #181818;
+            --color-background-secondary: #222222;
+            --color-background-primary: #2a2a2a;
+            --color-border-primary: #444444;
+            --color-border-secondary: #333333;
+            --color-border-tertiary: #2d2d2d;
+            --color-text-primary: #ffffff;
+            --color-text-secondary: #a0a0a0;
+            --color-text-muted: #666666;
+            --border-radius-lg: 16px;
+            --border-radius-md: 10px;
+            --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--color-background-outer);
+            color: var(--color-text-primary);
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .app {
+            background: var(--color-background-tertiary);
+            padding: 24px;
+            border-radius: var(--border-radius-lg);
+            border: 1px solid var(--color-border-tertiary);
+            width: 100%;
+            max-width: 820px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--color-background-secondary);
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-md);
+            padding: 14px 20px;
+            margin-bottom: 24px;
+        }
+
+        .nav-title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
+        .nav-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+
+        .toggle-row { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--color-text-secondary); }
+        .toggle {
+            display: flex;
+            background: var(--color-background-tertiary);
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: 24px; padding: 4px; gap: 4px;
+        }
+        .toggle button {
+            border: none; background: transparent; padding: 6px 18px;
+            border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;
+            color: var(--color-text-secondary); transition: all 0.2s ease;
+        }
+        .toggle button.active {
+            background: var(--color-background-secondary); color: var(--color-text-primary);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+
+        .panel {
+            background: var(--color-background-secondary);
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-lg); padding: 24px;
+        }
+
+        .label {
+            font-size: 11px; color: var(--color-text-secondary); margin-bottom: 12px;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+        }
+
+        textarea {
+            width: 100%; border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-md); padding: 14px; font-size: 15px;
+            height: 90px; color: var(--color-text-primary); background: var(--color-background-tertiary);
+            font-family: var(--font-sans); outline: none; transition: all 0.2s; resize: none;
+        }
+        textarea:focus { border-color: var(--color-text-secondary); }
+
+        .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+        .btn {
+            padding: 10px 20px; border-radius: var(--border-radius-md); font-size: 14px;
+            font-weight: 500; cursor: pointer; border: 0.5px solid var(--color-border-tertiary);
+            background: var(--color-background-tertiary); color: var(--color-text-primary);
+            transition: all 0.2s;
+        }
+        .btn:hover { background: var(--color-background-primary); }
+        .btn.primary { background: #E0E0E0; border-color: #E0E0E0; color: #111; }
+        .btn.primary:hover { background: #ffffff; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-top-color: #111;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .spinner-white {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-banner {
+            margin-top: 16px; padding: 12px 16px;
+            background: #2a1212; border: 1px solid #5a2020;
+            border-radius: var(--border-radius-md);
+            color: #ff8080; font-size: 13px;
+            display: none;
+        }
+        .error-banner.show { display: block; }
+
+        .result-box {
+            margin-top: 24px; padding: 20px; border-radius: var(--border-radius-md);
+            border: 0.5px solid var(--color-border-tertiary); background: var(--color-background-tertiary);
+            display: none; animation: fadeIn 0.3s ease;
+        }
+        .result-box.show { display: block; }
+
+        .result-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+        .conf-bar-wrap { flex: 1; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
+        .conf-bar { height: 100%; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+        .conf-label { font-size: 13px; font-weight: 600; color: var(--color-text-secondary); min-width: 40px; text-align: right; }
+
+        .cat-badge {
+            padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .headline-display { font-size: 14px; color: var(--color-text-secondary); font-style: italic; margin-bottom: 20px; }
+
+        .scores-grid {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .score-row { display: flex; align-items: center; gap: 8px; }
+        .score-bar-wrap { flex: 1; height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
+        .score-bar { height: 100%; border-radius: 2px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        /* Feed */
+        .feed-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+        }
+        .feed-status {
+            font-size: 12px; color: var(--color-text-muted);
+        }
+        .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-card {
+            flex: 1; min-width: 100px; background: var(--color-background-tertiary);
+            border: 1px solid var(--color-border-tertiary); border-radius: var(--border-radius-md);
+            padding: 14px; text-align: center;
+        }
+        .stat-n { font-size: 24px; font-weight: 600; }
+        .stat-l { font-size: 11px; margin-top: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+        .filter-pill {
+            padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+            cursor: pointer; border: 1px solid var(--color-border-tertiary);
+            background: var(--color-background-tertiary); color: var(--color-text-secondary);
+            transition: all 0.2s;
+        }
+        .filter-pill.active { border-color: var(--color-text-secondary); background: var(--color-background-primary); color: #fff; }
+
+        .news-list { display: flex; flex-direction: column; gap: 12px; }
+        .news-card {
+            padding: 16px; border-radius: var(--border-radius-md);
+            border: 1px solid var(--color-border-tertiary); background: var(--color-background-tertiary);
+            display: flex; gap: 14px; align-items: flex-start; transition: border-color 0.2s;
+            text-decoration: none;
+        }
+        .news-card:hover { border-color: var(--color-border-primary); }
+        .news-card.hidden { display: none; }
+        .news-card-text { font-size: 14px; font-weight: 500; line-height: 1.5; color: #eee; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+
+        .feed-loading {
+            text-align: center; padding: 48px 0;
+            color: var(--color-text-muted); font-size: 14px;
+            display: none;
+        }
+        .feed-loading.show { display: block; }
+        .feed-error {
+            padding: 16px; background: #2a1212; border: 1px solid #5a2020;
+            border-radius: var(--border-radius-md); color: #ff8080; font-size: 13px;
+            display: none; margin-bottom: 16px;
+        }
+        .feed-error.show { display: block; }
+
+        .refresh-note {
+            font-size: 11px; color: var(--color-text-muted); margin-top: 16px; text-align: center;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="app">
+  <div class="nav">
+    <div>
+      <div class="nav-title">NewsLens — multilingual headline classifier</div>
+      <div class="nav-sub">Hybrid BiLSTM + SVM &nbsp;·&nbsp; Filipino · English</div>
+    </div>
+    <div class="toggle-row">
+      <span>Mode</span>
+      <div class="toggle">
+        <button class="active" id="btn-single" onclick="switchMode('single')">Single</button>
+        <button id="btn-bulk" onclick="switchMode('bulk')">News feed</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SINGLE MODE ── -->
+  <div id="mode-single" class="panel">
+    <div class="label">Paste a headline</div>
+    <textarea id="headline-input" placeholder="Enter news text in Filipino or English..."></textarea>
+
+    <div class="btn-row">
+      <button class="btn primary" id="btn-classify" onclick="classifySingle()">Classify</button>
+      <button class="btn" onclick="loadSample()">Try a sample</button>
+      <button class="btn" onclick="clearSingle()">Clear</button>
+    </div>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <div class="result-box" id="result-box">
+      <div class="result-top">
+        <div class="cat-badge" id="cat-badge"></div>
+        <div class="conf-bar-wrap"><div class="conf-bar" id="conf-bar"></div></div>
+        <div class="conf-label" id="conf-label"></div>
+      </div>
+      <div class="headline-display" id="headline-echo"></div>
+      <div class="scores-grid" id="all-scores"></div>
+    </div>
+  </div>
+
+  <!-- ── FEED MODE ── -->
+  <div id="mode-bulk" class="panel" style="display:none">
+    <div class="feed-header">
+      <div class="label" style="margin-bottom:0">Live news feed</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="feed-status" id="feed-status"></span>
+        <button class="btn" id="btn-refresh" onclick="loadFeed()" style="padding:6px 14px;font-size:12px;">Refresh</button>
+      </div>
+    </div>
+
+    <div class="feed-error" id="feed-error"></div>
+
+    <div class="feed-loading" id="feed-loading">
+      <span class="spinner-white"></span> Fetching and classifying headlines…
+    </div>
+
+    <div id="feed-content" style="display:none">
+      <div class="stats-row" id="stats-row"></div>
+      <div class="label">Filter by category</div>
+      <div class="filter-row" id="filter-row"></div>
+      <div class="news-list" id="news-list"></div>
+      <div class="refresh-note" id="refresh-note"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_URL  = "https://allegra-expropriable-unsalubriously.ngrok-free.dev/predict";
+const FEED_URL = "https://allegra-expropriable-unsalubriously.ngrok-free.dev/feed";
+
+// Only your 4 actual model categories
+const CAT_COLORS = {
+  "Crime":                    { bg: '#3A1F1F', tx: '#FF7E7E', dot: '#E24B4A' },
+  "Sports":                   { bg: '#1B3A2E', tx: '#7DFFD3', dot: '#1D9E75' },
+  "Country and Politics":     { bg: '#1F2D3A', tx: '#83C3FF', dot: '#378ADD' },
+  "Celebrity and Entertainment": { bg: '#3A1F2D', tx: '#FF83B8', dot: '#D4537E' },
+};
+const FALLBACK_COLOR = { bg: '#2a2a2a', tx: '#cccccc', dot: '#777777' };
+function catColor(cat) { return CAT_COLORS[cat] || FALLBACK_COLOR; }
+
+// ── Sample headlines for "Try a sample" ──────────────────────────────────────
+const SAMPLES = [
+  "Mga putol na bahagi ng katawan, natagpuan sa ilalim ng tulay!",
+  "Gilas Pilipinas, tinalo ang South Korea sa overtime thriller",
+  "Suspek sa pagpatay sa negosyante sa Cebu, arestado na",
+  "Philippine basketball team captures FIBA Asia Cup championship",
+  "Bagong batas laban sa online scam, inaprubahan na ng Kongreso",
+  "Marcos signs law strengthening anti-terrorism measures",
+  "K-pop star announces world tour with Manila stop in November",
+  "Gilas Pilipinas defeats South Korea in overtime thriller",
+  "Police discover dismembered body parts under bridge",
+  "Senado, magsasagawa ng imbestigasyon sa manipulasyon ng presyo ng langis",
+];
+let sampleIdx = 0;
+
+// ── Single mode ───────────────────────────────────────────────────────────────
+async function classifySingle() {
+  const text = document.getElementById('headline-input').value.trim();
+  if (!text) return;
+
+  const btn   = document.getElementById('btn-classify');
+  const error = document.getElementById('error-banner');
+
+  btn.disabled    = true;
+  btn.innerHTML   = '<span class="spinner"></span>Classifying…';
+  error.classList.remove('show');
+  document.getElementById('result-box').classList.remove('show');
+
+  try {
+    const res = await fetch(API_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Server returned ${res.status}`);
+    }
+    const data = await res.json();
+    showResult(text, data.label, data.confidence, data.all_scores);
+  } catch (err) {
+    error.textContent = `⚠ Could not reach the model server. Make sure Flask is running on port 5000. (${err.message})`;
+    error.classList.add('show');
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = 'Classify';
+  }
+}
+
+function loadSample() {
+  document.getElementById('headline-input').value = SAMPLES[sampleIdx % SAMPLES.length];
+  sampleIdx++;
+  classifySingle();
+}
+
+function clearSingle() {
+  document.getElementById('headline-input').value = '';
+  document.getElementById('result-box').classList.remove('show');
+  document.getElementById('error-banner').classList.remove('show');
+}
+
+function showResult(text, cat, conf, allScores) {
+  const c   = catColor(cat);
+  const box = document.getElementById('result-box');
+  box.classList.add('show');
+
+  const badge = document.getElementById('cat-badge');
+  badge.textContent      = cat;
+  badge.style.background = c.bg;
+  badge.style.color      = c.tx;
+
+  const bar = document.getElementById('conf-bar');
+  bar.style.width      = Math.round(conf * 100) + '%';
+  bar.style.background = c.dot;
+  document.getElementById('conf-label').textContent = Math.round(conf * 100) + '%';
+
+  document.getElementById('headline-echo').textContent = `"${text}"`;
+
+  const allDiv = document.getElementById('all-scores');
+  allDiv.innerHTML = '';
+  Object.entries(allScores)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([label, score]) => {
+      const sc  = catColor(label);
+      const pct = Math.round(score * 100);
+      allDiv.innerHTML += `
+        <div class="score-row">
+          <span style="width:8px;height:8px;border-radius:50%;background:${sc.dot};flex-shrink:0"></span>
+          <span style="flex:0 0 160px;font-size:12px;color:var(--color-text-secondary)">${label}</span>
+          <div class="score-bar-wrap">
+            <div class="score-bar" style="width:${pct}%;background:${sc.dot}"></div>
+          </div>
+          <span style="font-size:12px;font-weight:600;min-width:34px;text-align:right">${pct}%</span>
+        </div>`;
+    });
+}
+
+document.getElementById('headline-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); classifySingle(); }
+});
+
+// ── Feed mode ─────────────────────────────────────────────────────────────────
+let feedData       = [];
+let activeFilter   = 'All';
+let feedTimer      = null;
+
+async function loadFeed() {
+  const loading = document.getElementById('feed-loading');
+  const content = document.getElementById('feed-content');
+  const errDiv  = document.getElementById('feed-error');
+  const status  = document.getElementById('feed-status');
+  const btnRef  = document.getElementById('btn-refresh');
+
+  loading.classList.add('show');
+  content.style.display = 'none';
+  errDiv.classList.remove('show');
+  btnRef.disabled = true;
+  status.textContent = 'Fetching…';
+
+  // Clear existing timer so we don't double-up
+  if (feedTimer) clearTimeout(feedTimer);
+
+  try {
+    const res = await fetch(FEED_URL);
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const json = await res.json();
+
+    feedData     = json.results || [];
+    activeFilter = 'All';
+
+    buildFeedUI();
+
+    const now = new Date();
+    status.textContent = `Updated ${now.toLocaleTimeString()}`;
+
+    // Show any per-source errors as a soft warning
+    if (json.errors && json.errors.length) {
+      const names = json.errors.map(e => e.source).join(', ');
+      errDiv.textContent = `⚠ Could not fetch from: ${names}. Other sources loaded fine.`;
+      errDiv.classList.add('show');
+    }
+
+    // Schedule next auto-refresh
+    document.getElementById('refresh-note').textContent =
+      'Headlines link to original articles';
+
+  } catch (err) {
+    errDiv.textContent = `⚠ Could not reach the feed server. Make sure Flask is running on port 5000. (${err.message})`;
+    errDiv.classList.add('show');
+    status.textContent = 'Failed';
+  } finally {
+    loading.classList.remove('show');
+    content.style.display = 'block';
+    btnRef.disabled = false;
+  }
+}
+
+function buildFeedUI() {
+  // Stats row
+  const stats = { All: feedData.length };
+  Object.keys(CAT_COLORS).forEach(c => { stats[c] = 0; });
+  feedData.forEach(item => {
+    if (stats[item.label] !== undefined) stats[item.label]++;
+    else stats[item.label] = (stats[item.label] || 0) + 1;
+  });
+
+  const sr = document.getElementById('stats-row');
+  sr.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-n">${stats.All}</div>
+      <div class="stat-l" style="color:var(--color-text-muted)">All</div>
+    </div>`;
+  Object.keys(CAT_COLORS).forEach(cat => {
+    const sc = catColor(cat);
+    sr.innerHTML += `
+      <div class="stat-card">
+        <div class="stat-n" style="color:${sc.dot}">${stats[cat] || 0}</div>
+        <div class="stat-l" style="color:${sc.dot}">${cat}</div>
+      </div>`;
+  });
+
+  // Filter pills
+  const fr = document.getElementById('filter-row');
+  fr.innerHTML = `<button class="filter-pill active" onclick="filterFeed('All', this)">All headlines</button>`;
+  Object.keys(CAT_COLORS).forEach(cat => {
+    fr.innerHTML += `<button class="filter-pill" onclick="filterFeed('${cat}', this)">${cat}</button>`;
+  });
+
+  // News cards
+  renderCards();
+}
+
+function renderCards() {
+  const nl = document.getElementById('news-list');
+  nl.innerHTML = '';
+
+  const visible = activeFilter === 'All'
+    ? feedData
+    : feedData.filter(item => item.label === activeFilter);
+
+  if (visible.length === 0) {
+    nl.innerHTML = `<div style="text-align:center;padding:32px;color:var(--color-text-muted);font-size:14px;">No headlines found for this category.</div>`;
+    return;
+  }
+
+  visible.forEach(item => {
+    const sc   = catColor(item.label);
+    const pct  = Math.round(item.confidence * 100);
+    const card = document.createElement('a');
+    card.className  = 'news-card';
+    card.href       = item.link || '#';
+    card.target     = '_blank';
+    card.rel        = 'noopener noreferrer';
+    card.innerHTML  = `
+      <div class="dot" style="background:${sc.dot}"></div>
+      <div style="flex:1">
+        <div class="news-card-text">${item.headline}</div>
+        <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+          <span style="background:${sc.bg};color:${sc.tx};font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase">${item.label}</span>
+          <span style="color:var(--color-text-muted);font-size:11px">${pct}% confidence</span>
+          <span style="color:var(--color-text-muted);font-size:11px">${item.source}</span>
+        </div>
+      </div>
+      <span style="color:var(--color-text-muted);font-size:18px;align-self:center;flex-shrink:0">↗</span>`;
+    nl.appendChild(card);
+  });
+}
+
+function filterFeed(cat, btn) {
+  activeFilter = cat;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  renderCards();
+}
+
+// ── Mode switch ───────────────────────────────────────────────────────────────
+function switchMode(mode) {
+  document.getElementById('mode-single').style.display = mode === 'single' ? 'block' : 'none';
+  document.getElementById('mode-bulk').style.display   = mode === 'bulk'   ? 'block' : 'none';
+  document.getElementById('btn-single').classList.toggle('active', mode === 'single');
+  document.getElementById('btn-bulk').classList.toggle('active',   mode === 'bulk');
+  if (mode === 'bulk' && feedData.length === 0) loadFeed();
+}
+</script>
+</body>
+</html>
