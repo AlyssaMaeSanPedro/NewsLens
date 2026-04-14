@@ -3,7 +3,7 @@ flask-cors
 feedparser
 numpy
 keras==3.14.0
-tensorflow==2.21.0
+tensorflow==2.15.0
 scikit-learn
 imbalanced-learn
 h5py
